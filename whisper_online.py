@@ -866,7 +866,7 @@ if __name__ == "__main__":
 
     audio_path = args.audio_path
 
-    SAMPLING_RATE = 16000
+    SAMPLING_RATE = 44100
     duration = len(load_audio(audio_path))/SAMPLING_RATE
     logger.info("Audio duration is: %2.2f seconds" % duration)
 

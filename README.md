@@ -101,7 +101,7 @@ options:
   --model_cache_dir MODEL_CACHE_DIR
                         Overriding the default model cache dir where models downloaded from the hub are saved
   --model_dir MODEL_DIR
-                        Dir where Whisper model.bin and other files are saved. This option overrides --model and --model_cache_dir parameter.
+                        Dir where Whisper model.bin and other files are saved. This option OVERRIDES --model and --model_cache_dir parameter.
   --lan LAN, --language LAN
                         Source language code, e.g. en,de,cs, or 'auto' for language detection.
   --task {transcribe,translate}
