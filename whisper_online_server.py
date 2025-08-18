@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from sympy.physics.units import current
+
 from whisper_online import *
 
 import sys
@@ -83,6 +85,10 @@ class Connection:
 import io
 import soundfile
 
+from datetime import datetime
+
+import threading
+
 # wraps socket and ASR object, and serves one client connection. 
 # next client should be served by a new instance of this object
 class ServerProcessor:
@@ -95,6 +101,9 @@ class ServerProcessor:
         self.last_end = None
 
         self.is_first = True
+
+        self.new_session = True
+        self.current_time = str()
 
     def receive_audio_chunk(self):
         # receive all audio that is available by this time
@@ -136,8 +145,15 @@ class ServerProcessor:
                 beg = max(beg, self.last_end)
 
             self.last_end = end
-            print("%1.0f %1.0f %s" % (beg,end,o[2]),flush=True,file=sys.stderr)
-            return "%1.0f %1.0f %s" % (beg,end,o[2])
+            format_line = "%1.0f %1.0f %s" % (beg,end,o[2])
+            print(format_line ,flush=True,file=sys.stderr)
+
+            if self.new_session:
+                self.current_time= datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+            with open(f"results/LIVE_{self.current_time}.txt", "a") as f:
+                f.write(format_line + "\n")
+
+            return format_line
         else:
             logger.debug("No text in this segment")
             return None
@@ -166,19 +182,39 @@ class ServerProcessor:
 #        self.send_result(o)
 
 
-
 # server loop
+def server_loop(se):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((args.host, args.port))
+        s.listen(1)
+        logger.info('Listening on'+str((args.host, args.port)))
+        while not se.is_set():
+            conn, addr = s.accept()
+            logger.info('Connected to client on {}'.format(addr))
+            connection = Connection(conn)
+            proc = ServerProcessor(connection, online, args.min_chunk_size)
+            proc.process()
+            conn.close()
+            logger.info('Connection to client closed')
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.bind((args.host, args.port))
-    s.listen(1)
-    logger.info('Listening on'+str((args.host, args.port)))
-    while True:
-        conn, addr = s.accept()
-        logger.info('Connected to client on {}'.format(addr))
-        connection = Connection(conn)
-        proc = ServerProcessor(connection, online, args.min_chunk_size)
-        proc.process()
-        conn.close()
-        logger.info('Connection to client closed')
-logger.info('Connection closed, terminating.')
+    logger.info('Connection closed, terminating.')
+
+if __name__ == '__main__':
+    stop_event = threading.Event()
+    server_thread = threading.Thread(target=server_loop, args=(stop_event,))
+    server_thread.daemon = True
+    server_thread.start()
+
+    try:
+        while True:
+            key = input()
+            if key == 'Q':
+                stop_event.set()
+                print("Stopping server...")
+                break
+    except KeyboardInterrupt:
+        stop_event.set()
+        print("\nServer stopped by KeyboardInterrupt.")
+
+    server_thread.join(timeout=2.0)  # Wait for server thread to exit
+    sys.exit(0)
