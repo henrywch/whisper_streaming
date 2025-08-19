@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from sympy.physics.units import current
 
 from whisper_online import *
 
@@ -15,7 +14,7 @@ parser = argparse.ArgumentParser()
 # server options
 parser.add_argument("--host", type=str, default='localhost')
 parser.add_argument("--port", type=int, default=43001)
-parser.add_argument("--warmup-file", type=str, dest="warmup_file", 
+parser.add_argument("--warmup-file", type=str, dest="warmup_file", default="E:\IT\Projects\Python\\Niera\\results\dummy\output_1.mp3",
         help="The path to a speech audio wav file to warm up Whisper so that the very first chunk processing is fast. It can be e.g. https://github.com/ggerganov/whisper.cpp/raw/master/samples/jfk.wav .")
 
 # options from whisper_online
@@ -54,7 +53,6 @@ import line_packet
 import socket
 
 class Connection:
-    '''it wraps conn object'''
     PACKET_SIZE = 32000*5*60 # 5 minutes # was: 65536
 
     def __init__(self, conn):
@@ -64,7 +62,6 @@ class Connection:
         self.conn.setblocking(True)
 
     def send(self, line):
-        '''it doesn't send the same line twice, because it was problematic in online-text-flow-events'''
         if line == self.last_line:
             return
         line_packet.send_one_line(self.conn, line)
@@ -136,7 +133,7 @@ class ServerProcessor:
 
         # This function differs from whisper_online.output_transcript in the following:
         # succeeding [beg,end] intervals are not overlapping because ELITR protocol (implemented in online-text-flow events) requires it.
-        # Therefore, beg, is max of previous end and current beg outputed by Whisper.
+        # Therefore, beg, is max of previous end and current beg outputted by Whisper.
         # Usually it differs negligibly, by appx 20 ms.
 
         if o[0] is not None:
@@ -197,10 +194,11 @@ class MockingBird:
 
     def __init__(self, model_path):
         self.model_path = model_path
-        self.load_llm()
         self.model = None
         self.tokenizer = None
+        self.load_llm()
 
+        self.query_folder = "results"
         self.ans_folder = "results\ANS_{}".format(datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
         self.ans_file_name = os.path.join(self.ans_folder, "chat_history.tsv")
 
@@ -208,19 +206,23 @@ class MockingBird:
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
             torch_dtype="auto",
-            device_map="auto"
+            device_map="auto",
+            local_files_only=True
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_path,
+            local_files_only=True
+        )
 
-    def locate_dialogs(self, local_dir: str = "results"):
-        search_pattern = os.path.join(local_dir, 'LIVE_*.txt')
+    def locate_dialogs(self):
+        search_pattern = os.path.join(self.query_folder, 'LIVE_*.txt')
         matching_files = glob.glob(search_pattern)
 
         if not matching_files:
             return None
         last_file_path = sorted(matching_files)[-1]
 
-        return os.path.basename(last_file_path)
+        return last_file_path
 
     def load_chat_history(self):
         history = []
@@ -300,9 +302,13 @@ class MockingBird:
 # server loop
 def server_loop(se):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        print("I'm here...")
         s.bind((args.host, args.port))
+        print("Now here...")
         s.listen(1)
+        print("Here...")
         logger.info('Listening on'+str((args.host, args.port)))
+        print("Haha...")
         while not se.is_set():
             conn, addr = s.accept()
             logger.info('Connected to client on {}'.format(addr))
@@ -312,11 +318,13 @@ def server_loop(se):
             conn.close()
             logger.info('Connection to client closed')
 
+            # mockbd.llm_thinking()
+
     logger.info('Connection closed, terminating.')
 
 
 if __name__ == '__main__':
-    mockbd = MockingBird(".\models\Qwen")
+    mockbd = MockingBird("E:\IT\Projects\Python\\Niera\models\Qwen")
 
     stop_event = threading.Event()
     server_thread = threading.Thread(target=server_loop, args=(stop_event,))
